@@ -16,6 +16,20 @@ int make_server_socketaddr(struct sockaddr_in *addr, int port){
     return 0;
 }
 
+int make_client_sockaddr(struct sockaddr_in *addr, const char *hostname, int port) {
+  addr->sin_family = AF_INET;
+
+  struct hostent *host = gethostbyname(hostname);
+  if (host == NULL) {
+    fprintf(stderr, "%s: unknown host\n", hostname);
+    return -1;
+  }
+  memcpy(&addr->sin_addr, host->h_addr, host->h_length);
+  addr->sin_port = htons(port);
+
+  return 0;
+}
+
 int get_port_number(int sockfd){
     struct sockaddr_in addr;
     socklen_t length = sizeof(addr);
@@ -28,3 +42,4 @@ int get_port_number(int sockfd){
     //use ntohs to convert from network byte to host byte
     return ntohs(addr.sin_port);
 }
+
