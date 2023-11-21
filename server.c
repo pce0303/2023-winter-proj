@@ -1,101 +1,95 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys.socket.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include "helper.h"
 
-//#define PORT 9090;
-static const size_t BUFFER_LEN 1024;
+#define BUFFER_LEN 1024
 
-int handle_connection(connetctionfd){
-    printf("New connection %d/n", connectionfd);
-    
-    char buffer[BUFFER_LEN + 1];
-    memset(buffer, 0, sizeof(buffer));
-    
-    //call recv() to consume all the data the client sends
-    ssize_t recvd = 0;
-    ssize_t rval;
-    do {
-        rval = recv(connectionfd, buffer + recvd, BUFFER_LEN - recvd, 0);
-        if (reval == -1){
-            perror("error reading stream message");
-            return -1;
-        }
-        recvd += reval;
-    } while (reval > 0); //recv() returns 0 when client close
-    
-    //print message
-    printf("client %d says '%s'/n", connectionfd, buffer);
-    
-    //close connection
-    close(connectionfd);
-    
-    return 0;
+// 클라이언트와의 연결을 처리하는 함수
+int handle_connection(int connectionfd) {
+  printf("New connection %d\n", connectionfd);
+
+  char buffer[BUFFER_LEN];
+  memset(buffer, 0, sizeof(buffer));
+
+  ssize_t recvd = 0;
+  ssize_t reval;
+  do {
+    reval = recv(connectionfd, buffer + recvd, BUFFER_LEN - recvd, 0);
+    if (reval == -1) {
+      perror("Error reading stream message");
+      return -1;
+    }
+    recvd += reval;
+  } while (reval > 0);
+
+  printf("Client %d says: '%s'\n", connectionfd, buffer);
+
+  close(connectionfd);
+
+  return 0;
 }
 
-int run_server(int port, int queue){
-    //create socket
-    int sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (sockfd == -1) {
-        perror("error opening stream socket");
-        return -1;
+// 서버를 실행하는 함수
+int run_server(int port, int queue) {
+  // 소켓 생성
+  int sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+  if (sockfd == -1) {
+    perror("Error opening stream socket");
+    return -1;
+  }
+
+  int yesval = 1;
+  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yesval, sizeof(yesval)) == -1) {
+    perror("Error setting socket options");
+    return -1;
+  }
+
+  struct sockaddr_in addr;
+  if (make_server_socketaddr(&addr, port) == -1) {
+    return -1;
+  }
+
+  if (bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+    perror("Error binding stream socket");
+    return -1;
+  }
+
+  port = get_port_number(sockfd);
+  printf("Server listening on port %d\n", port);
+
+  if (listen(sockfd, queue) == -1) {
+    perror("Error listening");
+    return -1;
+  }
+
+  while (1) {
+    int connectionfd = accept(sockfd, NULL, NULL);
+    if (connectionfd == -1) {
+      perror("Error accepting connections");
+      return -1;
     }
-    
-    //set the "reuse port" socket option
-    int yesval = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yesval, sizeof(yesval)) == -1){
-        perror("error setting socket options");
-        return -1;
+
+    if (handle_connection(connectionfd) == -1) {
+      return -1;
     }
-    
-    //create socket_addr
-    struct sockaddr_in addr;
-    if(make_server_socketaddr(&addr, port) == -1){
-        return -1;
-    }
-    
-    //bind to the port
-    if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) == -1){
-        perror("error binding stream socket");
-        return -1;
-    }
-    
-    //detect which port was chosen
-    port = get_port_number(sockfd);
-    printf("server listening on port %d/n", port);
-    
-    //listening for incoming connections
-    if (listen(sockfd, queue) == -1){
-        perror("error listening");
-        return -1;
-    }
-    
-    //accepting connection one by one forever
-    while (1) {
-        int connectionfd = accept(sockfd, NULL, NULL);
-        if (connectionfd == -1){
-            perror("error accepting connections");
-            return -1;
-        }
-        
-        if(handle_connection(connectionfd) == -1){
-            return -1;
-        }
-    }
-    
+  }
 }
 
-int main(int argc, char *argv[]){
-    if(argc != 2){
-        return 1;
-    }
-    const int port  = atoi(argv[1]);
-    
-    if(run_server(port, 10) == -1){
-        return 1;
-    }
-    return 0;
+int main(int argc, char* argv[]) {
+  if (argc != 2) {
+    printf("Usage: ./server port_num\n");
+    return 1;
+  }
+
+  const int port = atoi(argv[1]);
+
+  if (run_server(port, 10) == -1) {
+    return 1;
+  }
+
+  return 0;
 }
