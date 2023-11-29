@@ -10,33 +10,44 @@
 
 #define BUFFER_LEN 1024
 
-int send_message(const char *hostname, int port, const char *message) {
+typedef struct {
+  int sockfd;
+  struct sockaddr_in addr;
+} Connection;
+
+int create_connection(Connection *conn, const char *hostname, int port) {
+  // Create a socket
+  conn->sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+  if (conn->sockfd == -1) {
+    perror("Error creating socket");
+    return -1;
+  }
+
+  // Create a sockaddr_in to specify remote host and port
+  if (make_client_sockaddr(&conn->addr, hostname, port) == -1) {
+    return -1;
+  }
+
+  // Connect to remote server
+  if (connect(conn->sockfd, (struct sockaddr *)&conn->addr, sizeof(conn->addr)) == -1) {
+    perror("Error connecting stream socket");
+    return -1;
+  }
+
+  return 0;
+}
+
+int send_message(Connection *conn, const char *message) {
   const size_t message_len = strlen(message);
   if (message_len > BUFFER_LEN) {
     perror("Error: Message exceeds maximum length\n");
     return -1;
   }
 
-  // (1) Create a socket
-  int sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-
-  // (2) Create a sockaddr_in to specify remote host and port
-  struct sockaddr_in addr;
-  if (make_client_sockaddr(&addr, hostname, port) == -1) {
-    return -1;
-  }
-
-  // (3) Connect to remote server
-  if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
-    perror("Error connecting stream socket");
-    return -1;
-  }
-
-  // (4) Send message to remote server
-  // Call send() enough times to send all the data
+  // Send message to remote server
   ssize_t sent = 0;
   do {
-    const ssize_t n = send(sockfd, message + sent, message_len - sent, 0);
+    const ssize_t n = send(conn->sockfd, message + sent, message_len - sent, 0);
     if (n == -1) {
       perror("Error sending on stream socket");
       return -1;
@@ -44,10 +55,11 @@ int send_message(const char *hostname, int port, const char *message) {
     sent += n;
   } while (sent < message_len);
 
-  // (5) Close connection
-  close(sockfd);
-
   return 0;
+}
+
+void close_connection(Connection *conn) {
+  close(conn->sockfd);
 }
 
 int main(int argc, const char **argv) {
@@ -61,9 +73,18 @@ int main(int argc, const char **argv) {
   const char *message = argv[3];
 
   printf("Sending message %s to %s:%d\n", message, hostname, port);
-  if (send_message(hostname, port, message) == -1) {
+
+  Connection conn;
+  if (create_connection(&conn, hostname, port) == -1) {
     return 1;
   }
+
+  if (send_message(&conn, message) == -1) {
+    close_connection(&conn);
+    return 1;
+  }
+
+  close_connection(&conn);
 
   return 0;
 }

@@ -1,3 +1,4 @@
+
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +8,12 @@
 #include "helper.h"
 
 #define BUFFER_LEN 1024
+
+typedef struct {
+  int sockfd;
+  int port;
+  int queue;
+} Server;
 
 // 클라이언트와의 연결을 처리하는 함수
 int handle_connection(int connectionfd) {
@@ -34,40 +41,40 @@ int handle_connection(int connectionfd) {
 }
 
 // 서버를 실행하는 함수
-int run_server(int port, int queue) {
+int run_server(Server server) {
   // 소켓 생성
-  int sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-  if (sockfd == -1) {
+  server.sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+  if (server.sockfd == -1) {
     perror("Error opening stream socket");
     return -1;
   }
 
   int yesval = 1;
-  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yesval, sizeof(yesval)) == -1) {
+  if (setsockopt(server.sockfd, SOL_SOCKET, SO_REUSEADDR, &yesval, sizeof(yesval)) == -1) {
     perror("Error setting socket options");
     return -1;
   }
 
   struct sockaddr_in addr;
-  if (make_server_socketaddr(&addr, port) == -1) {
+  if (make_server_socketaddr(&addr, server.port) == -1) {
     return -1;
   }
 
-  if (bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+  if (bind(server.sockfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
     perror("Error binding stream socket");
     return -1;
   }
 
-  port = get_port_number(sockfd);
-  printf("Server listening on port %d\n", port);
+  server.port = get_port_number(server.sockfd);
+  printf("Server listening on port %d\n", server.port);
 
-  if (listen(sockfd, queue) == -1) {
+  if (listen(server.sockfd, server.queue) == -1) {
     perror("Error listening");
     return -1;
   }
 
   while (1) {
-    int connectionfd = accept(sockfd, NULL, NULL);
+    int connectionfd = accept(server.sockfd, NULL, NULL);
     if (connectionfd == -1) {
       perror("Error accepting connections");
       return -1;
@@ -85,9 +92,11 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  const int port = atoi(argv[1]);
+  Server server;
+  server.port = atoi(argv[1]);
+  server.queue = 10;
 
-  if (run_server(port, 10) == -1) {
+  if (run_server(server) == -1) {
     return 1;
   }
 
